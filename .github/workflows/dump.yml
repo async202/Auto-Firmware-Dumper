@@ -165,7 +165,7 @@ jobs:
         echo "$brand" > ${{ github.workspace }}/brand.txt
         echo "$version" > ${{ github.workspace }}/version.txt
 
-    - name: Collect SELinux Files & Decompile
+            - name: Collect SELinux Files & Decompile
       run: |
         # 1. Создаем структуру папок внутри папки дампа (DumprX/out/selinux) для итогового архива
         mkdir -p DumprX/out/selinux/system
@@ -177,9 +177,9 @@ jobs:
         # Создаем изолированную рабочую папку для декомпилятора
         rm -rf sepolicy_work && mkdir -p sepolicy_work
         
-        echo "=== Копирование папок SELinux из разделов дампа ==="
+        echo "=== Копирование папок SELinux и build.prop из разделов дампа ==="
         
-        # Функция для безопасного копирования
+        # Функция для безопасного копирования политик и сопутствующих build.prop
         copy_selinux_dir() {
           local src_dir="$1"
           local dest_name="$2"
@@ -192,10 +192,23 @@ jobs:
             # Копируем файлы в sepolicy_work/ИМЯ_РАЗДЕЛА/etc/selinux
             mkdir -p "sepolicy_work/${dest_name}/etc/selinux"
             cp -r "$src_dir"/* "sepolicy_work/${dest_name}/etc/selinux/" 2>/dev/null || true
+            
+            # Ищем и копируем build.prop для текущего раздела, чтобы скрипт определил версию SDK
+            # Проверяем как корень раздела (например, system/build.prop), так и вложенный корень (system/system/build.prop)
+            local partition_root=$(echo "$src_dir" | sed 's|/etc/selinux||')
+            if [ -f "${partition_root}/build.prop" ]; then
+              mkdir -p "sepolicy_work/${dest_name}"
+              cp "${partition_root}/build.prop" "sepolicy_work/${dest_name}/build.prop"
+              echo "  -> Скопирован build.prop для $dest_name"
+            elif [ -f "DumprX/out/${dest_name}/build.prop" ]; then
+              mkdir -p "sepolicy_work/${dest_name}"
+              cp "DumprX/out/${dest_name}/build.prop" "sepolicy_work/${dest_name}/build.prop"
+              echo "  -> Скопирован build.prop для $dest_name (из корня)"
+            fi
           fi
         }
 
-        # Сканируем и собираем ВСЕ разделы прошивки Tecno / Android
+        # Сканируем и собираем ВСЕ разделы прошивки
         copy_selinux_dir "DumprX/out/system/etc/selinux" "system"
         copy_selinux_dir "DumprX/out/system/system/etc/selinux" "system"
         copy_selinux_dir "DumprX/out/vendor/etc/selinux" "vendor"
@@ -204,16 +217,16 @@ jobs:
         copy_selinux_dir "DumprX/out/odm/etc/selinux" "odm"
         copy_selinux_dir "DumprX/out/vendor/odm/etc/selinux" "odm"
 
-        # РЕШЕНИЕ ПРОБЛЕМЫ ПУТЕЙ (Удовлетворяем assert скрипта):
-        # Если ваш скрипт жестко требует наличие файлов по путям без '/etc/selinux' 
-        # или наоборот, делает проверку 'system/etc/selinux', мы создаем копии путей.
-        # Теперь файлы системы будут доступны И в 'system/etc/selinux', И в 'system/etc/selinux/plat_sepolicy.cil'
+        # ДУБЛИРОВАНИЕ ДЛЯ ИСКЛЮЧЕНИЯ ОШИБОК СТРУКТУРЫ
         cd sepolicy_work
         
-        # На всякий случай делаем дубликат структуры system/system, если скрипт Tecno-специфичный
+        # Создаем дубликат структуры system/system/build.prop на случай, если скрипт ищет именно там
         if [ -d "system/etc/selinux" ]; then
           mkdir -p system/system/etc
           cp -r system/etc/selinux system/system/etc/ 2>/dev/null || true
+          if [ -f "system/build.prop" ]; then
+            cp "system/build.prop" "system/system/build.prop" 2>/dev/null || true
+          fi
         fi
 
         echo "=== Полное клонирование репозитория декомпилятора ==="
@@ -229,8 +242,7 @@ jobs:
             
             cd sepolicy_work
             
-            # Запускаем декомпиляцию от корня всей структуры (параметр "-s .")
-            # Скрипт увидит папки system, vendor, product, system_ext, odm одновременно
+            # Запускаем декомпиляцию от корня воссозданной структуры
             python3 ../SELinux-CIL-Decompiler/decompile_cil.py -s . -o ../DumprX/out/selinux/decompiled_te
             
             cd ..
