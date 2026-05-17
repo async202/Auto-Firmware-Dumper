@@ -174,8 +174,7 @@ jobs:
         mkdir -p DumprX/out/selinux/system_ext
         mkdir -p DumprX/out/selinux/odm
         
-        # Создаем изолированную рабочую папку для самого декомпилятора внутри workspace
-        # Это исключит путаницу с абсолютными путями раннера /home/runner/work/
+        # Создаем изолированную рабочую папку для декомпилятора
         rm -rf sepolicy_work && mkdir -p sepolicy_work/input
         
         echo "=== Копирование папок SELinux из разделов дампа ==="
@@ -190,20 +189,45 @@ jobs:
             # Копируем оригиналы в папку out для финального архива прошивки
             cp -r "$src_dir"/* DumprX/out/selinux/$dest_name/ 2>/dev/null || true
             
-            # Воссоздаем относительную структуру папок БЕЗ префикса DumprX/out/
-            # Например: sepolicy_work/input/system/etc/selinux/
-            local rel_path=$(echo "$src_dir" | sed 's|DumprX/out/||')
-            mkdir -p "sepolicy_work/input/$rel_path"
-            cp -r "$src_dir"/* "sepolicy_work/input/$rel_path/" 2>/dev/null || true
+            # ИСПРАВЛЕНИЕ ОШИБКИ ВЛОЖЕННОСТИ:
+            # Создаем для декомпилятора СТРОГУЮ структуру (system/etc/selinux, vendor/etc/selinux и т.д.)
+            # игнорируя двойные папки вида system/system или vendor/vendor
+            mkdir -p "sepolicy_work/input/${dest_name}/etc/selinux"
+            cp -r "$src_dir"/* "sepolicy_work/input/${dest_name}/etc/selinux/" 2>/dev/null || true
           fi
         }
 
         # Проверяем все варианты путей размещения SELinux в Android
-        copy_selinux_dir "DumprX/out/system/system/etc/selinux" "system"
-        copy_selinux_dir "DumprX/out/vendor/etc/selinux" "vendor"
-        copy_selinux_dir "DumprX/out/product/etc/selinux" "product"
-        copy_selinux_dir "DumprX/out/system_ext/etc/selinux" "system_ext"
-        copy_selinux_dir "DumprX/out/odm/etc/selinux" "odm"
+        # Сначала проверяем вложенные пути (они в приоритете), затем обычные
+        if [ -d "DumprX/out/system/system/etc/selinux" ]; then
+          copy_selinux_dir "DumprX/out/system/system/etc/selinux" "system"
+        else
+          copy_selinux_dir "DumprX/out/system/etc/selinux" "system"
+        fi
+
+        if [ -d "DumprX/out/vendor/vendor/etc/selinux" ]; then
+          copy_selinux_dir "DumprX/out/vendor/vendor/etc/selinux" "vendor"
+        else
+          copy_selinux_dir "DumprX/out/vendor/etc/selinux" "vendor"
+        fi
+
+        if [ -d "DumprX/out/product/product/etc/selinux" ]; then
+          copy_selinux_dir "DumprX/out/product/product/etc/selinux" "product"
+        else
+          copy_selinux_dir "DumprX/out/product/etc/selinux" "product"
+        fi
+
+        if [ -d "DumprX/out/system_ext/system_ext/etc/selinux" ]; then
+          copy_selinux_dir "DumprX/out/system_ext/system_ext/etc/selinux" "system_ext"
+        else
+          copy_selinux_dir "DumprX/out/system_ext/etc/selinux" "system_ext"
+        fi
+
+        if [ -d "DumprX/out/odm/odm/etc/selinux" ]; then
+          copy_selinux_dir "DumprX/out/odm/odm/etc/selinux" "odm"
+        else
+          copy_selinux_dir "DumprX/out/odm/etc/selinux" "odm"
+        fi
 
         echo "=== Полное клонирование репозитория декомпилятора ==="
         rm -rf SELinux-CIL-Decompiler
@@ -215,13 +239,12 @@ jobs:
             echo "=== Запуск декомпилятора ==="
             mkdir -p DumprX/out/selinux/decompiled_te
             
-            # Переходим в изолированную рабочую папку, чтобы python-скрипт 
-            # работал внутри неё с чистыми относительными путями (input/system/etc/...)
+            # Переходим в рабочую папку
             cd sepolicy_work
             
+            # Теперь пути внутри input гарантированно будут иметь вид input/system/etc/selinux
             python3 ../SELinux-CIL-Decompiler/decompile_cil.py -s input -o ../DumprX/out/selinux/decompiled_te
             
-            # Возвращаемся обратно в корень workspace
             cd ..
             echo "✅ Декомпиляция успешно завершена!"
           else
