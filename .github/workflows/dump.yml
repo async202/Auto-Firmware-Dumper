@@ -165,7 +165,7 @@ jobs:
         echo "$brand" > ${{ github.workspace }}/brand.txt
         echo "$version" > ${{ github.workspace }}/version.txt
 
-            - name: Collect SELinux Files & Decompile
+    - name: Collect SELinux Files & Decompile
       run: |
         # 1. Создаем структуру папок внутри папки дампа (DumprX/out/selinux) для итогового архива
         mkdir -p DumprX/out/selinux/system
