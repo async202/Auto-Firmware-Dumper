@@ -214,9 +214,13 @@ jobs:
         copy_selinux_dir "DumprX/out/system/etc/selinux" "system"
         copy_selinux_dir "DumprX/out/system/system/etc/selinux" "system"
         copy_selinux_dir "DumprX/out/vendor/etc/selinux" "vendor"
+        copy_selinux_dir "DumprX/out/vendor/system/etc/selinux" "vendor"
         copy_selinux_dir "DumprX/out/product/etc/selinux" "product"
+        copy_selinux_dir "DumprX/out/product/product/etc/selinux" "product"
         copy_selinux_dir "DumprX/out/system_ext/etc/selinux" "system_ext"
+        copy_selinux_dir "DumprX/out/system_ext/system_ext/etc/selinux" "system_ext"
         copy_selinux_dir "DumprX/out/odm/etc/selinux" "odm"
+        copy_selinux_dir "DumprX/out/odm/odm/etc/selinux" "odm"
         copy_selinux_dir "DumprX/out/vendor/odm/etc/selinux" "odm"
 
         # Создаем кросс-структуру путей (system/system) для прохождения внутренних assert-проверок скрипта
@@ -228,6 +232,10 @@ jobs:
             cp "system/build.prop" "system/system/build.prop" 2>/dev/null || true
           fi
         fi
+        
+        # Очистка битых символических ссылок в рабочей зоне
+        echo "=== Очистка битых символических ссылок в рабочей зоне ==="
+        find . -type l ! -exec test -e {} \; -delete
         cd ..
 
         echo "=== Клонирование декомпилятора ==="
@@ -235,31 +243,27 @@ jobs:
         git clone --depth 1 https://github.com/isus203/SELinux-CIL-Decompiler.git SELinux-CIL-Decompiler
 
         if [ -f "SELinux-CIL-Decompiler/decompile_cil.py" ]; then
-          echo "=== Подготовка баз макросов декомпилятора (Фикс для Tecno 202404 / 34.0) ==="
+          echo "=== Подготовка баз макросов декомпилятора (Жесткий фикс для Tecno 202404) ==="
           
-          # Трюк №1: Делаем символическую ссылку (или копию), чтобы нестандартная версия '202404' 
-          # ссылалась на совместимую базу Android 14 / 15 (34.0 или 33.0 / api/202504 если есть в репо)
+          # Физически копируем базу макросов Android 14 (34.0) в папку 202404
           cd SELinux-CIL-Decompiler/system/sepolicy/api/
           if [ ! -d "202404" ]; then
             if [ -d "34.0" ]; then
-              ln -s "34.0" "202404" || cp -r "34.0" "202404"
-              echo "  -> Создана совместимая ссылка 202404 -> 34.0"
+              cp -r "34.0" "202404"
+              echo "  -> Создана физическая копия API: 202404 <- 34.0"
             elif [ -d "202504" ]; then
-              ln -s "202504" "202404" || cp -r "202504" "202404"
-              echo "  -> Создана совместимая ссылка 202404 -> 202504"
+              cp -r "202504" "202404"
+              echo "  -> Создана физическая копия API: 202404 <- 202504"
             fi
           fi
           cd ../../../..
 
           echo "=== Запуск декомпилятора РАЗДЕЛЬНО для каждого раздела ==="
-          
-          # КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ ТРЕКА №2: 
-          # Запускаем скрипт из КОРНЯ репозитория декомпилятора.
-          # Чтобы он видел файлы дампов, мы передаем ему абсолютный путь через префикс $GITHUB_WORKSPACE/sepolicy_work/
           cd SELinux-CIL-Decompiler
           
           for part in system vendor product system_ext odm; do
-            local target_path="${GITHUB_WORKSPACE}/sepolicy_work/${part}/etc/selinux"
+            # ИСПРАВЛЕНО: убрано ключевое слово local, так как это цикл, а не функция
+            target_path="${GITHUB_WORKSPACE}/sepolicy_work/${part}/etc/selinux"
             if [ -d "$target_path" ]; then
               echo "=> Декомпиляция раздела: $part"
               
@@ -281,8 +285,7 @@ jobs:
         
         # Полная очистка временной рабочей директории
         rm -rf sepolicy_work
-        
-    
+      
     - name: Uploading ROM Dump (Only Archive to Release)
       env:
         GH_TOKEN: ${{ secrets.GTOKEN }}
