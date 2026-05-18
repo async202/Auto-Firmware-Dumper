@@ -167,48 +167,50 @@ jobs:
 
     - name: Collect SELinux Files & Decompile
       run: |
-        # 1. Создаем структуру папок внутри папки дампа (DumprX/out/selinux) для итогового архива
+        # 1. Создаем структуру папок для оригиналов и будущих раздельных результатов декомпиляции
         mkdir -p DumprX/out/selinux/system
         mkdir -p DumprX/out/selinux/vendor
         mkdir -p DumprX/out/selinux/product
         mkdir -p DumprX/out/selinux/system_ext
         mkdir -p DumprX/out/selinux/odm
         
-        # Создаем изолированную рабочую папку для декомпилятора
+        mkdir -p DumprX/out/selinux/decompiled_system
+        mkdir -p DumprX/out/selinux/decompiled_vendor
+        mkdir -p DumprX/out/selinux/decompiled_product
+        mkdir -p DumprX/out/selinux/decompiled_system_ext
+        mkdir -p DumprX/out/selinux/decompiled_odm
+        
+        # Создаем изолированную рабочую среду для декомпилятора
         rm -rf sepolicy_work && mkdir -p sepolicy_work
         
-        echo "=== Копирование папок SELinux и build.prop из разделов дампа ==="
+        echo "=== Копирование папок SELinux и build.prop ==="
         
-        # Функция для безопасного копирования политик и сопутствующих build.prop
         copy_selinux_dir() {
           local src_dir="$1"
           local dest_name="$2"
           
           if [ -d "$src_dir" ]; then
             echo "Найдена папка для $dest_name -> $src_dir"
-            # Копируем оригиналы в папку out для финального архива прошивки
             cp -r "$src_dir"/* DumprX/out/selinux/$dest_name/ 2>/dev/null || true
             
-            # Копируем файлы в sepolicy_work/ИМЯ_РАЗДЕЛА/etc/selinux
             mkdir -p "sepolicy_work/${dest_name}/etc/selinux"
             cp -r "$src_dir"/* "sepolicy_work/${dest_name}/etc/selinux/" 2>/dev/null || true
             
-            # Ищем и копируем build.prop для текущего раздела, чтобы скрипт определил версию SDK
-            # Проверяем как корень раздела (например, system/build.prop), так и вложенный корень (system/system/build.prop)
+            # Копируем build.prop для правильного SDK
             local partition_root=$(echo "$src_dir" | sed 's|/etc/selinux||')
             if [ -f "${partition_root}/build.prop" ]; then
               mkdir -p "sepolicy_work/${dest_name}"
               cp "${partition_root}/build.prop" "sepolicy_work/${dest_name}/build.prop"
-              echo "  -> Скопирован build.prop для $dest_name"
+              mkdir -p "sepolicy_work/${dest_name}/${dest_name}"
+              cp "${partition_root}/build.prop" "sepolicy_work/${dest_name}/${dest_name}/build.prop" 2>/dev/null || true
             elif [ -f "DumprX/out/${dest_name}/build.prop" ]; then
               mkdir -p "sepolicy_work/${dest_name}"
               cp "DumprX/out/${dest_name}/build.prop" "sepolicy_work/${dest_name}/build.prop"
-              echo "  -> Скопирован build.prop для $dest_name (из корня)"
             fi
           fi
         }
 
-        # Сканируем и собираем ВСЕ разделы прошивки
+        # Собираем дерево разделов во временную папку
         copy_selinux_dir "DumprX/out/system/etc/selinux" "system"
         copy_selinux_dir "DumprX/out/system/system/etc/selinux" "system"
         copy_selinux_dir "DumprX/out/vendor/etc/selinux" "vendor"
@@ -217,10 +219,8 @@ jobs:
         copy_selinux_dir "DumprX/out/odm/etc/selinux" "odm"
         copy_selinux_dir "DumprX/out/vendor/odm/etc/selinux" "odm"
 
-        # ДУБЛИРОВАНИЕ ДЛЯ ИСКЛЮЧЕНИЯ ОШИБОК СТРУКТУРЫ
+        # Создаем кросс-структуру путей (system/system) для прохождения внутренних assert-проверок
         cd sepolicy_work
-        
-        # Создаем дубликат структуры system/system/build.prop на случай, если скрипт ищет именно там
         if [ -d "system/etc/selinux" ]; then
           mkdir -p system/system/etc
           cp -r system/etc/selinux system/system/etc/ 2>/dev/null || true
@@ -228,34 +228,37 @@ jobs:
             cp "system/build.prop" "system/system/build.prop" 2>/dev/null || true
           fi
         fi
-
-        echo "=== Полное клонирование репозитория декомпилятора ==="
         cd ..
+
+        echo "=== Клонирование декомпилятора ==="
         rm -rf SELinux-CIL-Decompiler
         git clone --depth 1 https://github.com/isus203/SELinux-CIL-Decompiler.git SELinux-CIL-Decompiler
 
-        # Проверяем наличие файлов для декомпиляции и скрипта
         if [ -f "SELinux-CIL-Decompiler/decompile_cil.py" ]; then
-          if [ -n "$(ls -A sepolicy_work 2>/dev/null)" ]; then
-            echo "=== Запуск декомпилятора для ВСЕХ разделов ==="
-            mkdir -p DumprX/out/selinux/decompiled_te
-            
-            cd sepolicy_work
-            
-            # Запускаем декомпиляцию от корня воссозданной структуры
-            python3 ../SELinux-CIL-Decompiler/decompile_cil.py -s . -o ../DumprX/out/selinux/decompiled_te
-            
-            cd ..
-            echo "✅ Полная декомпиляция всех разделов успешно завершена!"
-          else
-            echo "::warning::Файлы SELinux не обнаружены. Декомпиляция пропущена."
-          fi
+          echo "=== Запуск декомпилятора РАЗДЕЛЬНО для каждого раздела ==="
+          cd sepolicy_work
+          
+          # Цикл декомпиляции: проверяем наличие каждого раздела и декомпилируем в его собственную папку
+          for part in system vendor product system_ext odm; do
+            if [ -d "${part}/etc/selinux" ]; then
+              echo "=> Декомпиляция раздела: $part"
+              python3 ../SELinux-CIL-Decompiler/decompile_cil.py -s "${part}/etc/selinux" -o "../DumprX/out/selinux/decompiled_${part}" || true
+              
+              # Небольшая очистка пустот: если папка осталась пустой, удаляем её
+              if [ -z "$(ls -A ../DumprX/out/selinux/decompiled_${part} 2>/dev/null)" ]; then
+                rm -rf "../DumprX/out/selinux/decompiled_${part}"
+              fi
+            fi
+          done
+          
+          cd ..
+          echo "✅ Раздельная декомпиляция всех SEPolicy успешно завершена!"
         else
           echo "::error::Скрипт decompile_cil.py не найден!"
           exit 1
         fi
         
-        # Полная очистка временной рабочей директории раннера
+        # Полная очистка временной рабочей директории
         rm -rf sepolicy_work
         
     - name: Uploading ROM Dump (Only Archive to Release)
