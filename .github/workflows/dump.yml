@@ -282,6 +282,7 @@ jobs:
         # Полная очистка временной рабочей директории
         rm -rf sepolicy_work
         
+    
     - name: Uploading ROM Dump (Only Archive to Release)
       env:
         GH_TOKEN: ${{ secrets.GTOKEN }}
@@ -317,6 +318,13 @@ jobs:
         git remote add origin "https://x-access-token:${{ secrets.GTOKEN }}@github.com/${{ github.repository_owner }}/$repo_name.git"
         git push -u origin main --force
         
+        # =========================================================================
+        # ОЧИСТКА БИТЫХ ССЫЛОК ПЕРЕД АРХИВАЦИЕЙ (Убирает Scan WARNINGS и errno=2)
+        # =========================================================================
+        echo "🧹 Очищаем битые символические ссылки перед архивацией..."
+        find . -type l ! -exec test -e {} \; -delete
+        # =========================================================================
+        
         echo "🗜️ Упаковываем весь дамп (включая папку selinux) в один .7z..."
         7z a -mx=1 "${{ github.workspace }}/full_dump_${codename}.7z" ./* -xr!.git -xr!README.md
         
@@ -332,7 +340,7 @@ jobs:
         mkdir -p ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"
         [ -d "lineage-device-tree" ] && mv lineage-device-tree/* ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"/
         mv * ${{ github.workspace }}/vnd_project/dump/ 2>/dev/null || true
-
+        
     - name: Create vendor tree
       if: env.GVT == 'true'
       run: |
