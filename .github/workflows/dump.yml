@@ -321,22 +321,25 @@ jobs:
         git remote add origin "https://x-access-token:${{ secrets.GTOKEN }}@github.com/${{ github.repository_owner }}/$repo_name.git"
         git push -u origin main --force
         
-        # =========================================================================
-        # ОЧИСТКА БИТЫХ ССЫЛОК ПЕРЕД АРХИВАЦИЕЙ (Убирает Scan WARNINGS и errno=2)
-        # =========================================================================
         echo "🧹 Очищаем битые символические ссылки перед архивацией..."
         find . -type l ! -exec test -e {} \; -delete
-        # =========================================================================
         
-        echo "🗜️ Упаковываем весь дамп (включая папку selinux) в один .7z..."
-        7z a -mx=1 "${{ github.workspace }}/full_dump_${codename}.7z" ./* -xr!.git -xr!README.md
+        # =========================================================================
+        # ФИКС ЗАГРУЗКИ: Нарезаем архив на части по 2000MB, чтобы обойти все лимиты GitHub
+        # Игнорируем заблокированную папку system/d/ с помощью флага -xr!
+        # =========================================================================
+        echo "🗜️ Упаковываем дамп частями в .7z..."
+        7z a -mx=1 -v2000m "${{ github.workspace }}/full_dump_${codename}.7z" ./* -xr!.git -xr!README.md -xr!system/d
         
         echo "🏷️ Создаем GitHub Release..."
-        gh release create "$tag_name" --repo "${{ github.repository_owner }}/$repo_name" --title "Full Dump $brand $codename" --notes "Полный архив прошивки с декомпилированными SEPolicy политиками." || true
+        gh release create "$tag_name" --repo "${{ github.repository_owner }}/$repo_name" --title "Full Dump $brand $codename" --notes "Полный архив прошивки (разделенный на части) с декомпилированными SEPolicy политиками." || true
         
-        echo "📤 Загружаем архив в релиз..."
-        gh release upload "$tag_name" --repo "${{ github.repository_owner }}/$repo_name" "${{ github.workspace }}/full_dump_${codename}.7z" --clobber
-        rm -f "${{ github.workspace }}/full_dump_${codename}.7z"
+        echo "📤 Загружаем ВСЕ части архива в релиз..."
+        # Загружаем файлы по маске .7z.* (7z создаст файлы .7z.001, .7z.002 и т.д.)
+        gh release upload "$tag_name" --repo "${{ github.repository_owner }}/$repo_name" ${{ github.workspace }}/full_dump_${codename}.7z.* --clobber
+        
+        rm -f ${{ github.workspace }}/full_dump_${codename}.7z.*
+        # =========================================================================
         
         # Подготовка структуры для следующих шагов
         mkdir -p ${{ github.workspace }}/vnd_project/dump
