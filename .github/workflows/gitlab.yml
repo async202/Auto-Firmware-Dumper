@@ -284,53 +284,45 @@ jobs:
         echo "USERNAME=$(cat repo.json | grep -o '"username":"[^"]*' | cut -d'"' -f4)" >> $GITHUB_ENV
         cat repo.json
 
-    - name: Push Dump to GitLab
+    - name: Push Dump to GitLab via SSH
+      env:
+        SSH_KEY: ${{ secrets.GITLAB_SSH_KEY }}
       run: |
+        # Настройка SSH-агента
+        mkdir -p ~/.ssh
+        echo "$SSH_KEY" > ~/.ssh/id_ed25519
+        chmod 600 ~/.ssh/id_ed25519
+        ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+        
         cd DumprX/out
-        
-        # Полная зачистка следов старого git
         sudo rm -rf .git .gitignore .gitattributes
-        
-        # Патч для битых символических ссылок перед коммитом
         find . -type l ! -exec test -e {} \; -delete
-        
-        # Получаем список разделов верхнего уровня (system, vendor и т.д.)
-        DUMP_DIR_LIST=$(find -type d -not -empty -printf "%P\n" | grep -v / | grep -v .git)
         
         git init
         git lfs install
-        
-        # Игнорируем лицензии sensetime, как в оригинальном воркфлоу
         find . \( -name "*sensetime*" -o -name "*.lic" \) | cut -d'/' -f'2-' >| .gitignore
-        
         git branch -M ${{ env.BRANCH }}
-        git config --global user.name "${{ env.UN }}"
-        git config --global user.email "${{ env.UEM }}"
         
-        # Настройка remote на GitLab
-        git remote add origin https://${{ secrets.GITLAB_TOKEN_NAME }}:${{ secrets.GITLAB_TOKEN }}@gitlab.com/${{ env.USERNAME }}/android_dump_${{ env.MANUFACTURER_NAME }}_${{ env.VENDOR_NAME }}.git
+        # Меняем URL на SSH-формат
+        git remote add origin git@gitlab.com:${{ env.USERNAME }}/android_dump_${{ env.MANUFACTURER_NAME }}_${{ env.VENDOR_NAME }}.git
         
-        # Отслеживание файлов > 100MB через Git LFS
         find . -type f -size +100M -exec git lfs track {} \;
-        
         if [ -f .gitattributes ]; then
             git add .gitattributes
             git commit -s -m "Setup Git LFS"
             git push -u origin ${{ env.BRANCH }}
         fi
         
-        # Покоммитный пуш по папкам разделов (чтобы избежать таймаутов и лимитов буфера)
+        # Пушим стандартным циклом
+        DUMP_DIR_LIST=$(find -type d -not -empty -printf "%P\n" | grep -v / | grep -v .git)
         for dir in ${DUMP_DIR_LIST}; do
             git add ${dir}
-            git commit -s -m "dump: ${dir}: import dump for ${{ env.VENDOR_NAME }}
-            Firmware: ${{ github.event.inputs.FIRMWARE_URL }}"
+            git commit -s -m "dump: ${dir}: import dump"
             git push -u origin ${{ env.BRANCH }}
         done
         
-        # Коммит оставшихся файлов в корне
         git add .
-        git commit -s -m "dump: import remaining dump for ${{ env.VENDOR_NAME }}
-        Firmware: ${{ github.event.inputs.FIRMWARE_URL }}"
+        git commit -s -m "dump: remaining files"
         git push -u origin ${{ env.BRANCH }}
 
     # Логика сборки Vendor Tree и Device Tree (если флаги активны) работает локально в workspace
