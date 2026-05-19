@@ -229,13 +229,10 @@ jobs:
         copy_selinux_dir "DumprX/out/system/etc/selinux" "system"
         copy_selinux_dir "DumprX/out/system/system/etc/selinux" "system"
         copy_selinux_dir "DumprX/out/vendor/etc/selinux" "vendor"
-        copy_selinux_dir "DumprX/out/vendor/system/etc/selinux" "vendor"
         copy_selinux_dir "DumprX/out/product/etc/selinux" "product"
-        copy_selinux_dir "DumprX/out/product/product/etc/selinux" "product"
         copy_selinux_dir "DumprX/out/system_ext/etc/selinux" "system_ext"
-        copy_selinux_dir "DumprX/out/system_ext/system_ext/etc/selinux" "system_ext"
         copy_selinux_dir "DumprX/out/odm/etc/selinux" "odm"
-        copy_selinux_dir "DumprX/out/odm/odm/etc/selinux" "odm"
+
         copy_selinux_dir "DumprX/out/vendor/odm/etc/selinux" "odm"
 
         cd sepolicy_work
