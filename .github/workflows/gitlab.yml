@@ -290,47 +290,79 @@ jobs:
         curl --header "PRIVATE-TOKEN: ${{ secrets.GITLAB_TOKEN }}" -X POST "https://gitlab.com/api/v4/projects?name=android_dump_${{ env.MANUFACTURER_NAME }}_${{ env.VENDOR_NAME }}&visibility=public" > repo.json
         echo "USERNAME=$(cat repo.json | grep -o '"username":"[^"]*' | cut -d'"' -f4)" >> $GITHUB_ENV
         cat repo.json
+        
+    - name: Create or Check Gitlab Repository
+      run: |
+        # Проверяем, существует ли уже репозиторий
+        # Заменяем возможные пробелы или спецсимволы в имени проекта на подчеркивания
+        PROJECT_NAME="android_dump_${{ env.MANUFACTURER_NAME }}_${{ env.VENDOR_NAME }}"
+        
+        # Получаем имя пользователя/группы из токена, чтобы знать точный путь
+        USER_INFO=$(curl --header "PRIVATE-TOKEN: ${{ secrets.GITLAB_TOKEN }}" "https://gitlab.com/api/v4/user")
+        USERNAME=$(echo "$USER_INFO" | grep -o '"username":"[^"]*' | cut -d'"' -f4)
+        echo "USERNAME=$USERNAME" >> $GITHUB_ENV
+        
+        # Проверяем статус репозитория в GitLab
+        STATUS_CODE=$(curl --header "PRIVATE-TOKEN: ${{ secrets.GITLAB_TOKEN }}" -s -o /dev/null -w "%{http_code}" "https://gitlab.com/api/v4/projects/${USERNAME}%2F${PROJECT_NAME}")
+        
+        if [ "$STATUS_CODE" = "200" ]; then
+          echo "✅ Репозиторий ${PROJECT_NAME} уже существует. Будет выполнено обновление."
+        else
+          echo "📁 Репозиторий ${PROJECT_NAME} не найден (Статус: $STATUS_CODE). Создаем новый..."
+          curl --header "PRIVATE-TOKEN: ${{ secrets.GITLAB_TOKEN }}" -X POST "https://gitlab.com/api/v4/projects?name=${PROJECT_NAME}&visibility=public"
+        fi
 
     - name: Push Dump to GitLab via SSH
       env:
         SSH_KEY: ${{ secrets.GITLAB_SSH_KEY }}
       run: |
-        # Настройка SSH-агента
+        # Авторизация SSH ключа внутри сессии сборщика
         mkdir -p ~/.ssh
         echo "$SSH_KEY" > ~/.ssh/id_ed25519
         chmod 600 ~/.ssh/id_ed25519
         ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
         
         cd DumprX/out
-        sudo rm -rf .git .gitignore .gitattributes
+        rm -rf .git .gitignore .gitattributes
         
         git init
         git lfs install
+        
+        # Настройка глобальных параметров
+        git config --global user.name "ツ๛abrohim๛"
+        git config --global user.email "callofduty.pubg786@gmail.com"
+        
+        # Игнорируем лицензии sensetime
         find . \( -name "*sensetime*" -o -name "*.lic" \) | cut -d'/' -f'2-' >| .gitignore
         git branch -M ${{ env.BRANCH }}
         
-        # Меняем URL на SSH-формат
+        # Линкуем через SSH адрес
         git remote add origin git@gitlab.com:${{ env.USERNAME }}/android_dump_${{ env.MANUFACTURER_NAME }}_${{ env.VENDOR_NAME }}.git
         
+        # Перехватываем крупные файлы в LFS
         find . -type f -size +100M -exec git lfs track {} \;
         if [ -f .gitattributes ]; then
             git add .gitattributes
             git commit -s -m "Setup Git LFS"
-            git push -u origin ${{ env.BRANCH }}
+            # Принудительный пуш (force), чтобы затереть/обновить LFS указатели при повторном дампе
+            git push -u origin ${{ env.BRANCH }} --force
         fi
         
-        # Пушим стандартным циклом
+        # Попапочный пуш для стабильности структуры
         DUMP_DIR_LIST=$(find -type d -not -empty -printf "%P\n" | grep -v / | grep -v .git)
         for dir in ${DUMP_DIR_LIST}; do
             git add ${dir}
-            git commit -s -m "dump: ${dir}: import dump"
-            git push -u origin ${{ env.BRANCH }}
+            git commit -s -m "dump: ${dir}: import/update dump for ${{ env.VENDOR_NAME }}
+            Firmware: ${{ github.event.inputs.FIRMWARE_URL }}"
+            git push -u origin ${{ env.BRANCH }} --force
         done
         
+        # Догружаем остальное
         git add .
-        git commit -s -m "dump: remaining files"
-        git push -u origin ${{ env.BRANCH }}
-
+        git commit -s -m "dump: import/update remaining dump for ${{ env.VENDOR_NAME }}
+        Firmware: ${{ github.event.inputs.FIRMWARE_URL }}"
+        git push -u origin ${{ env.BRANCH }} --force
+        
     # Логика сборки Vendor Tree и Device Tree (если флаги активны) работает локально в workspace
     - name: Create vendor tree
       if: env.GVT == 'true'
