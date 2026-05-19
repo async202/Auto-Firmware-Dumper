@@ -277,6 +277,17 @@ jobs:
           cd ..
         fi
         rm -rf sepolicy_work
+        
+        # === Очистка исходных папок SELinux перед пушем ===
+        # Удаляем только оригиналы (system, vendor, product, system_ext, odm) внутри папки selinux,
+        # папки decompiled_* затронуты не будут.
+        echo "=== Удаление оригинальных папок SELinux ==="
+        for part in system vendor product system_ext odm; do
+          if [ -d "DumprX/out/selinux/${part}" ]; then
+            echo "Удаление оригинальной папки SELinux: ${part}"
+            rm -rf "DumprX/out/selinux/${part}"
+          fi
+        done
 
     - name: Create Gitlab Repository
       run: |
