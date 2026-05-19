@@ -244,7 +244,6 @@ jobs:
           fi
         fi
         
-        find . -type l ! -exec test -e {} \; -delete
         cd ..
 
         rm -rf SELinux-CIL-Decompiler
@@ -304,7 +303,6 @@ jobs:
         
         cd DumprX/out
         sudo rm -rf .git .gitignore .gitattributes
-        find . -type l ! -exec test -e {} \; -delete
         
         git init
         git lfs install
