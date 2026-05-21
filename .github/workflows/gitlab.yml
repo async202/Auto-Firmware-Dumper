@@ -327,7 +327,22 @@ jobs:
         # Очистка битых символических ссылок в рабочей зоне
         echo "=== Очистка битых символических ссылок в рабочей зоне ==="
         find . -type l ! -exec test -e {} \; -delete
-        
+
+          # === Добавление патча в README.md (Сохраняя оригинал от DumprX) ===
+        # Проверяем, создал ли DumprX файл README.md. Если нет — создаем пустой.
+        if [ ! -f README.md ]; then
+          echo "# Android Firmware Dump: ${{ env.VENDOR_NAME }}" > README.md
+        fi
+
+        # Дописываем наши патчи в конец файла (используем >>)
+        echo "" >> README.md
+        echo "## Applied Patches & Processing (Custom)" >> README.md
+        echo "* **SELinux Policy Extraction:** Decoupled and successfully decompiled Android SEPolicy binary contexts into human-readable CIL/policy structures (\`selinux/decompiled_*\`)." >> README.md
+        echo "* **Symlink Cleanup:** Automated purging of broken, dangling, and invalid symbolic links within the workspace environment to ensure tree integrity (\`find . -type l ! -exec test -e {} \; -delete\`)." >> README.md
+        echo "" >> README.md
+        echo "---" >> README.md
+        echo "*Patched automatically via Custom GitHub Actions workflow.*" >> README.md
+
         rm -rf .git .gitignore .gitattributes
         
         git init
