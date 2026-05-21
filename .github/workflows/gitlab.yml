@@ -329,8 +329,8 @@ jobs:
         git lfs install
         
         # Настройка глобальных параметров
-        git config --global user.name "ツ๛abrohim๛"
-        git config --global user.email "callofduty.pubg786@gmail.com"
+        git config --global user.name "${{ env.UN }}"
+        git config --global user.email "${{ env.UEM }}"
         
         # Игнорируем лицензии sensetime
         find . \( -name "*sensetime*" -o -name "*.lic" \) | cut -d'/' -f'2-' >| .gitignore
