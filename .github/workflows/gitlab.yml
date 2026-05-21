@@ -323,6 +323,11 @@ jobs:
         ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
         
         cd DumprX/out
+
+        # Очистка битых символических ссылок в рабочей зоне
+        echo "=== Очистка битых символических ссылок в рабочей зоне ==="
+        find . -type l ! -exec test -e {} \; -delete
+        
         rm -rf .git .gitignore .gitattributes
         
         git init
