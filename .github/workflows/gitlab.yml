@@ -116,7 +116,7 @@ jobs:
     - name: Install firmware 
       run: |
         cd DumprX
-        python3 -m gdown --fuzzy "${{ env.FUR }}" -O firmware.zip
+        gdown "${{ env.FUR }}" -O firmware.zip
       working-directory: ${{ github.workspace }}
 
     - name: Patch and Verify Magiskboot
