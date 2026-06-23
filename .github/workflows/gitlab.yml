@@ -76,37 +76,6 @@ jobs:
         bash setup.sh
         pip3 install aospdtgen twrpdtgen
 
-    - name: Patch, Verify and Run DumprX
-      run: |
-          cd DumprX
-          
-          echo "=== 1. Скачивание универсального magiskboot ==="
-          curl -sLo magiskboot_generic "https://github.com/Uevo001/magiskboot-linux/raw/refs/heads/main/x86_64/magiskboot"
-          chmod +x magiskboot_generic
-          
-          echo "=== 2. Быстрый тест бинарника на совместимость (Smoke Test) ==="
-          # Перенаправляем вывод в grep. Если magiskboot успешно запустился и вывел справку,
-          # grep вернет 0, и тест пройдет. Если бы случился Core Dump, grep ничего бы не поймал.
-          if ./magiskboot_generic 2>&1 | grep -q "MagiskBoot"; then
-            echo "✅ Отлично! Бинарник успешно запустился и совместим с процессором раннера."
-          else
-            echo "❌ Ошибка: Бинарник несовместим или поврежден."
-            exit 1
-          fi
-          
-          echo "=== 3. Тотальное замещение всех копий magiskboot в DumprX ==="
-          find . -name "magiskboot" -type f -exec cp magiskboot_generic {} \; -print
-          
-          echo "=== 4. Запуск основного процесса дампа прошивки ==="
-          bash dumper.sh ./firmware.zip
-          
-          sudo chown -R $USER:$USER out
-          sudo chmod -R 755 out
-      working-directory: ${{ github.workspace }}
-      
-    - name: Install UV
-      run: curl -LsSf https://astral.sh/uv/install.sh | sh
-        
     - name: Update Packages
       run: |
         sudo apt update
@@ -114,6 +83,9 @@ jobs:
         sudo apt -y install cpio aria2 git python3 neofetch tar gzip p7zip-full python3-pip lz4 erofs-utils f2fs-tools libvixl-dev m4 checkpolicy git-lfs
         pip install gdown
 
+    - name: Install UV
+      run: curl -LsSf https://astral.sh/uv/install.sh | sh
+        
     - name: Setup GithubCLI
       run: |
         type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
@@ -127,31 +99,51 @@ jobs:
       run: |
         git config --global user.name "${{ env.UN }}"
         git config --global user.email "${{ env.UEM }}"
-
-        # Оптимизация сети
         git config --global http.postBuffer 6221225472
         git config --global core.compression 1
         git config --global http.lowSpeedLimit 0
         git config --global http.lowSpeedTime 999999
-        
-        # Настройка лимитов памяти для упаковки объектов
         git config --global pack.windowMemory "512m"
         git config --global pack.packSizeLimit "512m"
         git config --global pack.threads "1"
-
-        # Принудительно устанавливаем URL с токеном
         git remote set-url origin https://x-access-token:${{ secrets.GTOKEN }}@github.com/${{ github.repository }}.git
-
         git gc --prune=now --aggressive
         unset GITHUB_TOKEN
-        
         gh auth login --with-token <<< "${{ secrets.GTOKEN }}"
+      working-directory: ${{ github.workspace }}
+
+    - name: Clone and Setup DumprX
+      run: |
+        git clone https://github.com/DumprX/DumprX
+        cd DumprX
+        sudo chmod +x *.sh
+        bash setup.sh
+        pip3 install aospdtgen twrpdtgen
       working-directory: ${{ github.workspace }}
   
     - name: Install firmware 
       run: |
         cd DumprX
-        gdown "${{ env.FUR }}" -O firmware.zip
+        python3 -m gdown --fuzzy "${{ env.FUR }}" -O firmware.zip
+      working-directory: ${{ github.workspace }}
+
+    - name: Patch and Verify Magiskboot
+      run: |
+        cd DumprX
+        echo "=== 1. Скачивание универсального magiskboot ==="
+        curl -sLo magiskboot_generic "https://github.com/Uevo001/magiskboot-linux/raw/refs/heads/main/x86_64/magiskboot"
+        chmod +x magiskboot_generic
+        
+        echo "=== 2. Быстрый тест бинарника на совместимость (Smoke Test) ==="
+        if ./magiskboot_generic 2>&1 | grep -q "MagiskBoot"; then
+          echo "✅ Отлично! Бинарник успешно запустился и совместим с процессором раннера."
+        else
+          echo "❌ Ошибка: Бинарник несовместим или поврежден."
+          exit 1
+        fi
+        
+        echo "=== 3. Тотальное замещение всех копий magiskboot в DumprX ==="
+        find . -name "magiskboot" -type f -exec cp magiskboot_generic {} \; -print
       working-directory: ${{ github.workspace }}
         
     - name: Create Dump
