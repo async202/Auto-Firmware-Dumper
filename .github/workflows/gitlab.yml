@@ -6,7 +6,7 @@ on:
       USER_NAME:
         description: 'Name of your GitHub Account'
         required: true
-        default: 'isus203'
+        default: 'async202'
       USER_EMAIL:
         description: 'E-mail of your GitHub Account'
         required: true
