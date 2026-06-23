@@ -76,20 +76,29 @@ jobs:
         bash setup.sh
         pip3 install aospdtgen twrpdtgen
 
-    - name: Fix DumprX Magiskboot Illegal Instruction
+    - name: Patch, Verify and Run DumprX
       run: |
-        cd DumprX
-        # Находим, где именно в DumprX прячется оригинальный magiskboot
-        MAGISKBOOT_BIN=$(find . -name "magiskboot" -type f | head -n 1)
-        if [ ! -z "$MAGISKBOOT_BIN" ]; then
-          echo "Found broken magiskboot at $MAGISKBOOT_BIN, replacing with Uevo001 static binary..."
-          # Скачиваем бинарник напрямую из ветки main репозитория Uevo001
-          curl -sLo "$MAGISKBOOT_BIN" "https://raw.githubusercontent.com/Uevo001/magiskboot-linux/main/x86_64/magiskboot"
-          chmod +x "$MAGISKBOOT_BIN"
-          echo "Successfully patched magiskboot!"
-        else
-          echo "Warning: magiskboot binary not found in repo layout."
-        fi
+          cd DumprX
+          
+          echo "=== 1. Скачивание гарантированно чистого универсального magiskboot ==="
+          curl -sLo magiskboot_generic "https://github.com/Uevo001/magiskboot-linux/raw/refs/heads/main/x86_64/magiskboot"
+          chmod +x magiskboot_generic
+          
+          echo "=== 2. Быстрый тест бинарника на совместимость (Smoke Test) ==="
+          # Если процессор раннера не поддерживает этот бинарник, 
+          # шаг упадет прямо здесь, сэкономив вам время.
+          ./magiskboot_generic --help > /dev/null
+          echo "✅ Скачанный magiskboot успешно прошел тест на совместимость процессора!"
+          
+          echo "=== 3. Тотальное замещение всех копий magiskboot в DumprX ==="
+          # Находим абсолютно все файлы с именем magiskboot в репозитории и перезаписываем их чистой версией
+          find . -name "magiskboot" -type f -exec cp magiskboot_generic {} \; -print
+          
+          echo "=== 4. Запуск основного процесса дампа прошивки ==="
+          bash dumper.sh ./firmware.zip
+          
+          sudo chown -R $USER:$USER out
+          sudo chmod -R 755 out
       working-directory: ${{ github.workspace }}
       
     - name: Install UV
