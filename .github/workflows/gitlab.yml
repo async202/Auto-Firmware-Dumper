@@ -398,8 +398,8 @@ jobs:
         
         cd ${{ github.workspace }}/vnd_project
         if [ -d android/device/"$brand"/"$codename" ]; then
-           git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-22.1 ./android/tools/extract-utils
-           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-22.1 ./android/prebuilts/extract-tools
+           git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-18.1 ./android/tools/extract-utils
+           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-18.1 ./android/prebuilts/extract-tools
            
            sudo chmod 777 android/device/"$brand"/"$codename"/*.sh
            cd android/device/"$brand"/"$codename"
