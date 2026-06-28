@@ -68,6 +68,14 @@ jobs:
       with:
         swap-size-gb: 12
 
+    - name: Clone and Setup DumprX
+      run: |
+        git clone https://github.com/DumprX/DumprX
+        cd DumprX
+        sudo chmod +x *.sh
+        bash setup.sh
+        pip3 install aospdtgen twrpdtgen
+
     - name: Update Packages
       run: |
         sudo apt update
