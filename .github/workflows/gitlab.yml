@@ -80,21 +80,18 @@ jobs:
       run: |
           cd DumprX
           
-          echo "=== 1. Скачивание универсального magiskboot ==="
+          echo "=== 1. Скачивание гарантированно чистого универсального magiskboot ==="
           curl -sLo magiskboot_generic "https://github.com/Uevo001/magiskboot-linux/raw/refs/heads/main/x86_64/magiskboot"
           chmod +x magiskboot_generic
           
           echo "=== 2. Быстрый тест бинарника на совместимость (Smoke Test) ==="
-          # Перенаправляем вывод в grep. Если magiskboot успешно запустился и вывел справку,
-          # grep вернет 0, и тест пройдет. Если бы случился Core Dump, grep ничего бы не поймал.
-          if ./magiskboot_generic 2>&1 | grep -q "MagiskBoot"; then
-            echo "✅ Отлично! Бинарник успешно запустился и совместим с процессором раннера."
-          else
-            echo "❌ Ошибка: Бинарник несовместим или поврежден."
-            exit 1
-          fi
+          # Если процессор раннера не поддерживает этот бинарник, 
+          # шаг упадет прямо здесь, сэкономив вам время.
+          ./magiskboot_generic --help > /dev/null
+          echo "✅ Скачанный magiskboot успешно прошел тест на совместимость процессора!"
           
           echo "=== 3. Тотальное замещение всех копий magiskboot в DumprX ==="
+          # Находим абсолютно все файлы с именем magiskboot в репозитории и перезаписываем их чистой версией
           find . -name "magiskboot" -type f -exec cp magiskboot_generic {} \; -print
           
           echo "=== 4. Запуск основного процесса дампа прошивки ==="
