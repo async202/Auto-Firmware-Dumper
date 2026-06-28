@@ -74,8 +74,7 @@ jobs:
         cd DumprX
         sudo chmod +x *.sh
         bash setup.sh
-        # Убрали изначальную установку aospdtgen, оставляем только twrpdtgen
-        pip3 install twrpdtgen
+        pip3 install aospdtgen twrpdtgen
       
     - name: Install UV
       run: curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -191,22 +190,24 @@ jobs:
         echo "VENDOR_NAME=$codename" >> $GITHUB_ENV
         echo "BRANCH=$branch" >> $GITHUB_ENV
 
-    # Новый шаг: Динамический запуск генератора дерева устройств на основе версии Android
-    - name: Run aospdtgen dynamically
+    - name: Fix Legacy Tree if Needed
       run: |
         SDK_VER=$(cat ${{ github.workspace }}/sdk_ver.txt)
-        echo "🤖 Анализ версии SDK: $SDK_VER"
-        
         if [ "$SDK_VER" -le "32" ]; then
-           echo "📦 Старая система (Android 12 и ниже). Устанавливаем legacy aospdtgen (<3.0.0)..."
-           pip3 install "aospdtgen<3.0.0" --force-reinstall
+          echo "⚠️ Обнаружена старая версия Android (SDK $SDK_VER), но dumper.sh использовал новый флагманский aospdtgen."
+          echo "🔄 Пересобираем дерево в классическом формате..."
+          
+          # Очищаем дерево нового образца, которое наплодил dumper.sh
+          rm -rf DumprX/out/aosp-device-tree DumprX/out/device 2>/dev/null || true
+          
+          # Откатываем генератор на legacy-версию
+          pip3 install "aospdtgen<3.0.0" --force-reinstall
+          
+          # Генерируем классическое дерево со скриптом extract-files.sh обратно в out/aosp-device-tree
+          python3 -m aospdtgen DumprX/out/ DumprX/out/aosp-device-tree/
         else
-           echo "📦 Современная система (Android 13+). Устанавливаем актуальный aospdtgen..."
-           pip3 install aospdtgen --upgrade
+          echo "✅ Современная версия Android (SDK $SDK_VER). Дерево от dumper.sh подходит идеально."
         fi
-        
-        echo "🚀 Запуск генерации дерева устройств..."
-        python3 -m aospdtgen DumprX/out/
       working-directory: ${{ github.workspace }}
 
     - name: Collect SELinux Files & Decompile
@@ -397,21 +398,16 @@ jobs:
         mkdir -p ${{ github.workspace }}/vnd_project/dump
         mkdir -p ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"
         
-        # 1. Отправляем чистый дамп в предназначенную для него папку
         cp -r DumprX/out/* ${{ github.workspace }}/vnd_project/dump/ 2>/dev/null || true
         
-        # 2. Изолируем дерево устройства от общего дампа в зависимости от версии генератора
         if [ -d DumprX/out/aosp-device-tree ]; then
           cp -r DumprX/out/aosp-device-tree/* ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"/ 2>/dev/null || true
         elif [ -d DumprX/out/device/"$brand"/"$codename" ]; then
           cp -r DumprX/out/device/"$brand"/"$codename"/* ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"/ 2>/dev/null || true
-        elif [ -d aosp-device-tree ]; then
-          cp -r aosp-device-tree/* ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"/ 2>/dev/null || true
         fi
         
         cd ${{ github.workspace }}/vnd_project
         
-        # 3. Проверяем тип сгенерированного экстрактора и подтягиваем нужные инструменты LineageOS
         if [ -f android/device/"$brand"/"$codename"/extract-files.py ]; then
            echo "🔄 Найдено дерево нового типа (Python). Клонируем утилиты lineage-21..."
            git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-21 ./android/tools/extract-utils
@@ -431,7 +427,6 @@ jobs:
            bash extract-files.sh ${{ github.workspace }}/vnd_project/dump/
         else
            echo "❌ ОШИБКА: Скрипт экстрактора не найден в папке устройства!"
-           ls -la android/device/"$brand"/"$codename"/
            exit 1
         fi
         
