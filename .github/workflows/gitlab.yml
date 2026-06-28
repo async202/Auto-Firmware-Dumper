@@ -123,7 +123,7 @@ jobs:
       run: |
         cd DumprX
         echo "=== 1. Скачивание универсального magiskboot ==="
-        curl -sLo magiskboot_generic "https://github.com/async202/magiskboot-linux/raw/refs/heads/main/x86_64/magiskboot"
+        curl -sLo magiskboot_generic "https://github.com/Uevo001/magiskboot-linux/raw/refs/heads/main/x86_64/magiskboot"
         chmod +x magiskboot_generic
         
         echo "=== 2. Быстрый тест бинарника на совместимость (Smoke Test) ==="
