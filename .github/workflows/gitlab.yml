@@ -190,25 +190,25 @@ jobs:
         echo "VENDOR_NAME=$codename" >> $GITHUB_ENV
         echo "BRANCH=$branch" >> $GITHUB_ENV
 
-    - name: Fix Legacy Tree if Needed
-      run: |
-        SDK_VER=$(cat ${{ github.workspace }}/sdk_ver.txt)
-        if [ "$JW_VER" -le "32" ] || [ "$SDK_VER" -le "32" ]; then
-          echo "⚠️ Обнаружена старая версия Android (SDK $SDK_VER), но dumper.sh использовал новый флагманский aospdtgen."
-          echo "🔄 Пересобираем дерево в классическом формате..."
+    # - name: Fix Legacy Tree if Needed
+    #   run: |
+    #     SDK_VER=$(cat ${{ github.workspace }}/sdk_ver.txt)
+    #     if [ "$JW_VER" -le "32" ] || [ "$SDK_VER" -le "32" ]; then
+    #       echo "⚠️ Обнаружена старая версия Android (SDK $SDK_VER), но dumper.sh использовал новый флагманский aospdtgen."
+    #       echo "🔄 Пересобираем дерево в классическом формате..."
           
-          # Очищаем дерево нового образца, которое наплодил dumper.sh
-          rm -rf DumprX/out/aosp-device-tree DumprX/out/device 2>/dev/null || true
+    #       # Очищаем дерево нового образца, которое наплодил dumper.sh
+    #       rm -rf DumprX/out/aosp-device-tree DumprX/out/device 2>/dev/null || true
           
-          # Откатываем генератор на legacy-версию
-          pip3 install "aospdtgen<3.0.0" --force-reinstall
+    #       # Откатываем генератор на legacy-версию
+    #       pip3 install "aospdtgen<3.0.0" --force-reinstall
           
-          # Генерируем классическое дерево. Для старых версий используем флаг -o
-          python3 -m aospdtgen DumprX/out/ -o DumprX/out/aosp-device-tree/
-        else
-          echo "✅ Современная версия Android (SDK $SDK_VER). Дерево от dumper.sh подходит идеально."
-        fi
-      working-directory: ${{ github.workspace }}
+    #       # Генерируем классическое дерево. Для старых версий используем флаг -o
+    #       python3 -m aospdtgen DumprX/out/ -o DumprX/out/aosp-device-tree/
+    #     else
+    #       echo "✅ Современная версия Android (SDK $SDK_VER). Дерево от dumper.sh подходит идеально."
+    #     fi
+    #   working-directory: ${{ github.workspace }}
 
     - name: Collect SELinux Files & Decompile
       run: |
@@ -388,8 +388,7 @@ jobs:
         Firmware: ${{ github.event.inputs.FIRMWARE_URL }}"
         git push -u origin ${{ env.BRANCH }} --force
         
-    # ПОЛНОСТЬЮ ОБНОВЛЕННЫЙ ШАГ: Создание дерева вендора с умным разделением версий
-    - name: Create vendor tree
+    - name: Create Vendor tree
       if: env.GVT == 'true'
       run: |
         codename=$(cat ${{ github.workspace }}/codename.txt)
@@ -398,35 +397,41 @@ jobs:
         mkdir -p ${{ github.workspace }}/vnd_project/dump
         mkdir -p ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"
         
+        # Копируем созданный дамп обратно для утилиты экстрактора
         cp -r DumprX/out/* ${{ github.workspace }}/vnd_project/dump/ 2>/dev/null || true
         
-        if [ -d DumprX/out/aosp-device-tree ]; then
-          cp -r DumprX/out/aosp-device-tree/* ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"/ 2>/dev/null || true
-        elif [ -d DumprX/out/device/"$brand"/"$codename" ]; then
-          cp -r DumprX/out/device/"$brand"/"$codename"/* ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"/ 2>/dev/null || true
+        # Копируем сгенерированное дерево устройства в структуру проекта
+        if [ -d DumprX/out/device/"$brand"/"$codename" ]; then
+           echo "📦 Найдено дерево устройства нового образца в DumprX/out/device/"
+           cp -r DumprX/out/device/"$brand"/"$codename"/* ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"/
+        elif [ -d DumprX/out/aosp-device-tree ]; then
+           echo "📦 Найдено дерево устройства классического образца в DumprX/out/aosp-device-tree/"
+           cp -r DumprX/out/aosp-device-tree/* ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"/
         fi
         
         cd ${{ github.workspace }}/vnd_project
         
+        # Динамическая проверка формата экстрактора и клонирование правильных веток
         if [ -f android/device/"$brand"/"$codename"/extract-files.py ]; then
-           echo "🔄 Найдено дерево нового типа (Python). Клонируем утилиты lineage-21..."
-           git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-21.0 ./android/tools/extract-utils
-           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-21.0 ./android/prebuilts/extract-tools
+           echo "🔄 Найдено дерево нового типа (Python). Клонируем утилиты из ветки lineage-23.2..."
+           git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-23.2 ./android/tools/extract-utils
+           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-23.2 ./android/prebuilts/extract-tools
            
            sudo chmod +x android/device/"$brand"/"$codename"/*.py 2>/dev/null || true
            cd android/device/"$brand"/"$codename"
            python3 extract-files.py ${{ github.workspace }}/vnd_project/dump/
            
         elif [ -f android/device/"$brand"/"$codename"/extract-files.sh ]; then
-           echo "🔄 Найдено классическое дерево (Bash). Клонируем утилиты lineage-18.1..."
-           git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-18.1 ./android/tools/extract-utils
-           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-18.1 ./android/prebuilts/extract-tools
+           echo "📜 Найдено дерево старого типа (Bash). Клонируем совместимую ветку lineage-22.0..."
+           git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-22.0 ./android/tools/extract-utils
+           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-22.0 ./android/prebuilts/extract-tools
            
            sudo chmod +x android/device/"$brand"/"$codename"/*.sh 2>/dev/null || true
            cd android/device/"$brand"/"$codename"
            bash extract-files.sh ${{ github.workspace }}/vnd_project/dump/
+           
         else
-           echo "❌ ОШИБКА: Скрипт экстрактора не найден в папке устройства!"
+           echo "❌ Ошибка: Сгенерированное дерево устройства пусто или файлы экстрактора отсутствуют!"
            exit 1
         fi
         
