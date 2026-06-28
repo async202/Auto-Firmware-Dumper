@@ -74,7 +74,7 @@ jobs:
         cd DumprX
         sudo chmod +x *.sh
         bash setup.sh
-        pip3 install aospdtgen twrpdtgen
+        pip3 install "aospdtgen==1.2.0" twrpdtgen
       
     - name: Install UV
       run: curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -400,40 +400,22 @@ jobs:
         # Копируем созданный дамп обратно для утилиты экстрактора
         cp -r DumprX/out/* ${{ github.workspace }}/vnd_project/dump/ 2>/dev/null || true
         
-        # Копируем сгенерированное дерево устройства в структуру проекта
-        if [ -d DumprX/out/device/"$brand"/"$codename" ]; then
-           echo "📦 Найдено дерево устройства нового образца в DumprX/out/device/"
-           cp -r DumprX/out/device/"$brand"/"$codename"/* ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"/
-        elif [ -d DumprX/out/aosp-device-tree ]; then
-           echo "📦 Найдено дерево устройства классического образца в DumprX/out/aosp-device-tree/"
+        # Копируем сгенерированное дерево устройства (классический путь aospdtgen 1.2.0)
+        if [ -d DumprX/out/aosp-device-tree ]; then
+           echo "📦 Найдено дерево устройства в DumprX/out/aosp-device-tree/"
            cp -r DumprX/out/aosp-device-tree/* ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"/
         fi
         
         cd ${{ github.workspace }}/vnd_project
         
-        # Динамическая проверка формата экстрактора и клонирование правильных веток
-        if [ -f android/device/"$brand"/"$codename"/extract-files.py ]; then
-           echo "🔄 Найдено дерево нового типа (Python). Клонируем утилиты из ветки lineage-23.2..."
-           git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-23.2 ./android/tools/extract-utils
-           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-23.2 ./android/prebuilts/extract-tools
-           
-           sudo chmod +x android/device/"$brand"/"$codename"/*.py 2>/dev/null || true
-           cd android/device/"$brand"/"$codename"
-           python3 extract-files.py ${{ github.workspace }}/vnd_project/dump/
-           
-        elif [ -f android/device/"$brand"/"$codename"/extract-files.sh ]; then
-           echo "📜 Найдено дерево старого типа (Bash). Клонируем совместимую ветку lineage-22.0..."
-           git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-22.0 ./android/tools/extract-utils
-           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-22.0 ./android/prebuilts/extract-tools
-           
-           sudo chmod +x android/device/"$brand"/"$codename"/*.sh 2>/dev/null || true
-           cd android/device/"$brand"/"$codename"
-           bash extract-files.sh ${{ github.workspace }}/vnd_project/dump/
-           
-        else
-           echo "❌ Ошибка: Сгенерированное дерево устройства пусто или файлы экстрактора отсутствуют!"
-           exit 1
-        fi
+        echo "📜 Используем проверенный Bash-формат. Клонируем утилиты lineageOS..."
+        git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-18.1 ./android/tools/extract-utils
+        git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-18.1 ./android/prebuilts/extract-tools
+        
+        # Даем права на запуск и стартуем экстрактор
+        sudo chmod +x android/device/"$brand"/"$codename"/*.sh 2>/dev/null || true
+        cd android/device/"$brand"/"$codename"
+        bash extract-files.sh ${{ github.workspace }}/vnd_project/dump/
         
     - name: Uploading Vendor Tree
       if: env.GVT == 'true'
