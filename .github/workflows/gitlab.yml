@@ -410,8 +410,8 @@ jobs:
         
         if [ -f android/device/"$brand"/"$codename"/extract-files.py ]; then
            echo "🔄 Найдено дерево нового типа (Python). Клонируем утилиты lineage-21..."
-           git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-21 ./android/tools/extract-utils
-           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-21 ./android/prebuilts/extract-tools
+           git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-21.0 ./android/tools/extract-utils
+           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-21.0 ./android/prebuilts/extract-tools
            
            sudo chmod +x android/device/"$brand"/"$codename"/*.py 2>/dev/null || true
            cd android/device/"$brand"/"$codename"
