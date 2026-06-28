@@ -193,7 +193,7 @@ jobs:
     - name: Fix Legacy Tree if Needed
       run: |
         SDK_VER=$(cat ${{ github.workspace }}/sdk_ver.txt)
-        if [ "$SDK_VER" -le "32" ]; then
+        if [ "$JW_VER" -le "32" ] || [ "$SDK_VER" -le "32" ]; then
           echo "⚠️ Обнаружена старая версия Android (SDK $SDK_VER), но dumper.sh использовал новый флагманский aospdtgen."
           echo "🔄 Пересобираем дерево в классическом формате..."
           
@@ -203,8 +203,8 @@ jobs:
           # Откатываем генератор на legacy-версию
           pip3 install "aospdtgen<3.0.0" --force-reinstall
           
-          # Генерируем классическое дерево со скриптом extract-files.sh обратно в out/aosp-device-tree
-          python3 -m aospdtgen DumprX/out/ DumprX/out/aosp-device-tree/
+          # Генерируем классическое дерево. Для старых версий используем флаг -o
+          python3 -m aospdtgen DumprX/out/ -o DumprX/out/aosp-device-tree/
         else
           echo "✅ Современная версия Android (SDK $SDK_VER). Дерево от dumper.sh подходит идеально."
         fi
