@@ -75,22 +75,6 @@ jobs:
         sudo chmod +x *.sh
         bash setup.sh
         pip3 install aospdtgen twrpdtgen
-
-    - name: Fix DumprX Magiskboot Illegal Instruction
-      run: |
-        cd DumprX
-        # Находим, где именно в DumprX прячется оригинальный magiskboot
-        MAGISKBOOT_BIN=$(find . -name "magiskboot" -type f | head -n 1)
-        if [ ! -z "$MAGISKBOOT_BIN" ]; then
-          echo "Found broken magiskboot at $MAGISKBOOT_BIN, replacing with Uevo001 static binary..."
-          # Скачиваем бинарник напрямую из ветки main репозитория Uevo001
-          curl -sLo "$MAGISKBOOT_BIN" "https://raw.githubusercontent.com/Uevo001/magiskboot-linux/main/x86_64/magiskboot"
-          chmod +x "$MAGISKBOOT_BIN"
-          echo "Successfully patched magiskboot!"
-        else
-          echo "Warning: magiskboot binary not found in repo layout."
-        fi
-      working-directory: ${{ github.workspace }}
       
     - name: Install UV
       run: curl -LsSf https://astral.sh/uv/install.sh | sh
