@@ -74,7 +74,8 @@ jobs:
         cd DumprX
         sudo chmod +x *.sh
         bash setup.sh
-        pip3 install "aospdtgen==1.2.0" twrpdtgen
+        sed -i 's/uvx aospdtgen/uvx aospdtgen==1.2.0/g' dumper.sh
+        pip3 install twrpdtgen
       
     - name: Install UV
       run: curl -LsSf https://astral.sh/uv/install.sh | sh
