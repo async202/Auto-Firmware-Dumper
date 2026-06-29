@@ -389,7 +389,7 @@ jobs:
         Firmware: ${{ github.event.inputs.FIRMWARE_URL }}"
         git push -u origin ${{ env.BRANCH }} --force
         
-    - name: Create Vendor tree
+    - name: Create vendor tree
       if: env.GVT == 'true'
       run: |
         codename=$(cat ${{ github.workspace }}/codename.txt)
@@ -397,11 +397,10 @@ jobs:
         
         mkdir -p ${{ github.workspace }}/vnd_project/dump
         mkdir -p ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"
+        mkdir -p ${{ github.workspace }}/vnd_project/android/vendor/"$brand"/"$codename"
         
-        # Копируем созданный дамп обратно для утилиты экстрактора
         cp -r DumprX/out/* ${{ github.workspace }}/vnd_project/dump/ 2>/dev/null || true
         
-        # Копируем сгенерированное дерево устройства (классический путь aospdtgen 1.2.0)
         if [ -d DumprX/out/aosp-device-tree ]; then
            echo "📦 Найдено дерево устройства в DumprX/out/aosp-device-tree/"
            cp -r DumprX/out/aosp-device-tree/* ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"/
@@ -413,7 +412,6 @@ jobs:
         git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-18.1 ./android/tools/extract-utils
         git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-18.1 ./android/prebuilts/extract-tools
         
-        # Даем права на запуск и стартуем экстрактор
         sudo chmod +x android/device/"$brand"/"$codename"/*.sh 2>/dev/null || true
         cd android/device/"$brand"/"$codename"
         bash extract-files.sh ${{ github.workspace }}/vnd_project/dump/
