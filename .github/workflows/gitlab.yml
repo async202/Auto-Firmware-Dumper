@@ -143,30 +143,30 @@ jobs:
         # Ищем build.prop рекурсивно по всем важным разделам
         ALL_PROPS=$(find . -name "build*.prop")
 
-        # 1. Извлекаем BRAND (учитываем суб-разделы и удаляем \r)
-        brand=$(grep -oP "(?<=^ro\.product\.(system\.|vendor\.|odm\.|product\.)?brand=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
-        [[ -z "$brand" ]] && brand=$(grep -m1 -oP "(?<=^ro\.product\.manufacturer=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
+        # 1. Извлекаем BRAND (используем \K для обхода ограничения на фиксированную длину)
+        brand=$(grep -oP "^ro\.product\.(system\.|vendor\.|odm\.|product\.)?brand=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
+        [[ -z "$brand" ]] && brand=$(grep -m1 -oP "^ro\.product\.manufacturer=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
         
-        # 2. Извлекаем CODENAME (игнорируем референсные заглушки MediaTek вроде full_64)
-        codename=$(grep -oP "(?<=^ro\.product\.(system\.|vendor\.|odm\.|product\.)?device=).*" -hs $ALL_PROPS | grep -vE -i "full|generic|mt[0-9]|base" | head -1 | tr -d '\r')
-        [[ -z "$codename" ]] && codename=$(grep -oP "(?<=^ro\.product\.(system\.|vendor\.|odm\.|product\.)?model=).*" -hs $ALL_PROPS | grep -vE -i "full|generic|mt[0-9]|base" | head -1 | tr -d '\r')
+        # 2. Извлекаем CODENAME (Игнорируем заглушки FULL-64 / generic, сохраняем РЕГИСТР)
+        codename=$(grep -oP "^ro\.product\.(system\.|vendor\.|odm\.|product\.)?device=\K.*" -hs $ALL_PROPS | grep -vE -i "full|generic|mt[0-9]|base" | head -1 | tr -d '\r')
+        [[ -z "$codename" ]] && codename=$(grep -oP "^ro\.product\.(system\.|vendor\.|odm\.|product\.)?model=\K.*" -hs $ALL_PROPS | grep -vE -i "full|generic|mt[0-9]|base" | head -1 | tr -d '\r')
         
-        # Если из-за фильтров выше ничего не нашлось, берём первое попавшееся сырое значение
-        [[ -z "$codename" ]] && codename=$(grep -oP "(?<=^ro\.product\.(system\.|vendor\.|odm\.|product\.)?device=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
+        # Фолбэк, если из-за фильтров выше ничего не нашлось
+        [[ -z "$codename" ]] && codename=$(grep -oP "^ro\.product\.(system\.|vendor\.|odm\.|product\.)?device=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
 
         # 3. Извлекаем VERSION
-        version=$(grep -oP "(?<=^ro\.build\.version\.release=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
-        [[ -z "$version" ]] && version=$(grep -oP "(?<=^ro\.build\.version\.release_or_codename=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
+        version=$(grep -oP "^ro\.build\.version\.release=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
+        [[ -z "$version" ]] && version=$(grep -oP "^ro\.build\.version\.release_or_codename=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
 
         # 4. Извлекаем SDK_VER
-        sdk_ver=$(grep -oP "(?<=^ro\.build\.version\.sdk=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
+        sdk_ver=$(grep -oP "^ro\.build\.version\.sdk=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
         [[ -z "$sdk_ver" ]] && sdk_ver="33"
 
-        # Дополнительно вытягиваем BRANCH для структуры репозитория
-        branch=$(grep -oP "(?<=^ro\.vendor\.build\.id=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
-        [[ -z "$branch" ]] && branch=$(grep -oP "(?<=^ro\.build\.id=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
+        # Извлекаем BRANCH
+        branch=$(grep -oP "^ro\.vendor\.build\.id=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
+        [[ -z "$branch" ]] && branch=$(grep -oP "^ro\.build\.id=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
 
-        # Очистка имен от недопустимых символов
+        # Очистка имен: бренд в ловеркейс, в кодовом имени убираем пробелы и меняем дефисы на подчёркивания
         brand=$(echo "$brand" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]_')
         codename=$(echo "$codename" | tr -d '[:space:]' | tr '-' '_')
         branch=$(echo "$branch" | tr -d '[:space:]' | tr '-' '_')
@@ -176,9 +176,9 @@ jobs:
         [[ -z "$codename" ]] && codename="${{ github.event.inputs.CODE_NAME }}"
         [[ -z "$branch" ]] && branch="main"
         
-        # Финальный жесткий дефолт на случай, если и инпуты запуска были пустыми
+        # Жесткий дефолт на крайний случай
         [[ -z "$brand" ]] && brand="tecno"
-        [[ -z "$codename" ]] && codename="le7n"
+        [[ -z "$codename" ]] && codename="TECNO_LE7n"
         
         echo "========================================"
         echo "BRAND       : $brand"
