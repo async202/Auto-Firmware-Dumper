@@ -143,34 +143,42 @@ jobs:
         # Ищем build.prop рекурсивно по всем важным разделам
         ALL_PROPS=$(find . -name "build*.prop")
 
-        # 1. Извлекаем BRAND
-        brand=$(grep -m1 -oP "(?<=^ro.product.brand=).*" -hs $ALL_PROPS | head -1)
-        [[ -z "$brand" ]] && brand=$(grep -m1 -oP "(?<=^ro.product.manufacturer=).*" -hs $ALL_PROPS | head -1)
+        # 1. Извлекаем BRAND (учитываем суб-разделы и удаляем \r)
+        brand=$(grep -oP "(?<=^ro\.product\.(system\.|vendor\.|odm\.|product\.)?brand=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
+        [[ -z "$brand" ]] && brand=$(grep -m1 -oP "(?<=^ro\.product\.manufacturer=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
         
-        # 2. Извлекаем CODENAME
-        codename=$(grep -m1 -oP "(?<=^ro.product.model=).*" -hs $ALL_PROPS | head -1)
-        [[ -z "$codename" ]] && codename=$(grep -m1 -oP "(?<=^ro.product.device=).*" -hs $ALL_PROPS | head -1)
+        # 2. Извлекаем CODENAME (игнорируем референсные заглушки MediaTek вроде full_64)
+        codename=$(grep -oP "(?<=^ro\.product\.(system\.|vendor\.|odm\.|product\.)?device=).*" -hs $ALL_PROPS | grep -vE -i "full|generic|mt[0-9]|base" | head -1 | tr -d '\r')
+        [[ -z "$codename" ]] && codename=$(grep -oP "(?<=^ro\.product\.(system\.|vendor\.|odm\.|product\.)?model=).*" -hs $ALL_PROPS | grep -vE -i "full|generic|mt[0-9]|base" | head -1 | tr -d '\r')
+        
+        # Если из-за фильтров выше ничего не нашлось, берём первое попавшееся сырое значение
+        [[ -z "$codename" ]] && codename=$(grep -oP "(?<=^ro\.product\.(system\.|vendor\.|odm\.|product\.)?device=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
 
         # 3. Извлекаем VERSION
-        version=$(grep -m1 -oP "(?<=^ro.build.version.release=).*" -hs $ALL_PROPS | head -1)
-        [[ -z "$version" ]] && version=$(grep -m1 -oP "(?<=^ro.build.version.release_or_codename=).*" -hs $ALL_PROPS | head -1)
+        version=$(grep -oP "(?<=^ro\.build\.version\.release=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
+        [[ -z "$version" ]] && version=$(grep -oP "(?<=^ro\.build\.version\.release_or_codename=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
 
-        # 4. Извлекаем SDK_VER для динамического выбора веток
-        sdk_ver=$(grep -m1 -oP "(?<=^ro.build.version.sdk=).*" -hs $ALL_PROPS | head -1)
+        # 4. Извлекаем SDK_VER
+        sdk_ver=$(grep -oP "(?<=^ro\.build\.version\.sdk=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
         [[ -z "$sdk_ver" ]] && sdk_ver="33"
 
-        # Дополнительно вытягиваем BRANCH для структуры репозитория как в gitlab-dumprx
-        branch=$(grep -m1 -oP "(?<=^ro.vendor.build.id=).*" -hs $ALL_PROPS | head -1)
-        [[ -z "$branch" ]] && branch=$(grep -m1 -oP "(?<=^ro.build.id=).*" -hs $ALL_PROPS | head -1)
+        # Дополнительно вытягиваем BRANCH для структуры репозитория
+        branch=$(grep -oP "(?<=^ro\.vendor\.build\.id=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
+        [[ -z "$branch" ]] && branch=$(grep -oP "(?<=^ro\.build\.id=).*" -hs $ALL_PROPS | head -1 | tr -d '\r')
 
-        # Очистка имен
+        # Очистка имен от недопустимых символов
         brand=$(echo "$brand" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]_')
         codename=$(echo "$codename" | tr -d '[:space:]' | tr '-' '_')
         branch=$(echo "$branch" | tr -d '[:space:]' | tr '-' '_')
         
+        # Применяем кастомные значения из инпутов, если grep выдал пустоту
         [[ -z "$brand" ]] && brand="${{ github.event.inputs.VENDOR_NAME }}"
         [[ -z "$codename" ]] && codename="${{ github.event.inputs.CODE_NAME }}"
         [[ -z "$branch" ]] && branch="main"
+        
+        # Финальный жесткий дефолт на случай, если и инпуты запуска были пустыми
+        [[ -z "$brand" ]] && brand="tecno"
+        [[ -z "$codename" ]] && codename="le7n"
         
         echo "========================================"
         echo "BRAND       : $brand"
@@ -186,7 +194,7 @@ jobs:
         echo "$sdk_ver" > ${{ github.workspace }}/sdk_ver.txt
         echo "$branch" > ${{ github.workspace }}/branch.txt
         
-        # Заносим переменные в GITHUB_ENV для совместимости с логикой шагов GitLab
+        # Заносим переменные в GITHUB_ENV
         echo "MANUFACTURER_NAME=$brand" >> $GITHUB_ENV
         echo "VENDOR_NAME=$codename" >> $GITHUB_ENV
         echo "BRANCH=$branch" >> $GITHUB_ENV
