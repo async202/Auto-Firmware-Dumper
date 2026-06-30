@@ -143,11 +143,11 @@ jobs:
         # Ищем build.prop рекурсивно по всем важным разделам
         ALL_PROPS=$(find . -name "build*.prop")
 
-        # 1. Извлекаем BRAND (используем \K для обхода ограничения на фиксированную длину)
+        # 1. Извлекаем BRAND
         brand=$(grep -oP "^ro\.product\.(system\.|vendor\.|odm\.|product\.)?brand=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
         [[ -z "$brand" ]] && brand=$(grep -m1 -oP "^ro\.product\.manufacturer=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
         
-        # 2. Извлекаем CODENAME (Игнорируем заглушки FULL-64 / generic, сохраняем РЕГИСТР)
+        # 2. Извлекаем CODENAME (Игнорируем заглушки FULL-64 / generic)
         codename=$(grep -oP "^ro\.product\.(system\.|vendor\.|odm\.|product\.)?device=\K.*" -hs $ALL_PROPS | grep -vE -i "full|generic|mt[0-9]|base" | head -1 | tr -d '\r')
         [[ -z "$codename" ]] && codename=$(grep -oP "^ro\.product\.(system\.|vendor\.|odm\.|product\.)?model=\K.*" -hs $ALL_PROPS | grep -vE -i "full|generic|mt[0-9]|base" | head -1 | tr -d '\r')
         
@@ -166,19 +166,28 @@ jobs:
         branch=$(grep -oP "^ro\.vendor\.build\.id=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
         [[ -z "$branch" ]] && branch=$(grep -oP "^ro\.build\.id=\K.*" -hs $ALL_PROPS | head -1 | tr -d '\r')
 
-        # Очистка имен: бренд в ловеркейс, в кодовом имени убираем пробелы и меняем дефисы на подчёркивания
+        # ================= STRIP & CLEAN LOGIC =================
+        # 1. Бренд всегда в нижний регистр и убираем мусор
         brand=$(echo "$brand" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]_')
-        codename=$(echo "$codename" | tr -d '[:space:]' | tr '-' '_')
-        branch=$(echo "$branch" | tr -d '[:space:]' | tr '-' '_')
         
-        # Применяем кастомные значения из инпутов, если grep выдал пустоту
+        # 2. Кодовое имя в нижний регистр для безопасной обработки
+        codename=$(echo "$codename" | tr '[:upper:]' '[:lower:]')
+        # Отсекаем префикс бренда, если строка начинается с него (например: tecno-le7n -> -le7n)
+        codename=${codename#"$brand"}
+        # Оставляем ТОЛЬКО чистые буквы и цифры (удаляет дефисы, подчёркивания и пробелы: -le7n -> le7n)
+        codename=$(echo "$codename" | tr -cd '[:alnum:]')
+        
+        branch=$(echo "$branch" | tr -d '[:space:]' | tr '-' '_')
+        # =======================================================
+        
+        # Применяем кастомные значения из инпутов, если автоматика не отработала
         [[ -z "$brand" ]] && brand="${{ github.event.inputs.VENDOR_NAME }}"
         [[ -z "$codename" ]] && codename="${{ github.event.inputs.CODE_NAME }}"
         [[ -z "$branch" ]] && branch="main"
         
-        # Жесткий дефолт на крайний случай
+        # Жесткий фолбэк на самый крайний случай
         [[ -z "$brand" ]] && brand="tecno"
-        [[ -z "$codename" ]] && codename="TECNO_LE7n"
+        [[ -z "$codename" ]] && codename="le7n"
         
         echo "========================================"
         echo "BRAND       : $brand"
@@ -402,6 +411,7 @@ jobs:
       run: |
         codename=$(cat ${{ github.workspace }}/codename.txt)
         brand=$(cat ${{ github.workspace }}/brand.txt)
+        DT_DIR="${{ github.workspace }}/vnd_project/android/device/$brand/$codename"
         
         mkdir -p ${{ github.workspace }}/vnd_project/dump
         mkdir -p ${{ github.workspace }}/vnd_project/android/device/"$brand"/"$codename"
@@ -419,10 +429,39 @@ jobs:
         echo "📜 Используем проверенный Bash-формат. Клонируем утилиты lineageOS..."
         git clone --depth=1 https://github.com/LineageOS/android_tools_extract-utils -b lineage-18.1 ./android/tools/extract-utils
         git clone --depth=1 https://github.com/LineageOS/android_prebuilts_extract-tools -b lineage-18.1 ./android/prebuilts/extract-tools
-        
-        sudo chmod +x android/device/"$brand"/"$codename"/*.sh 2>/dev/null || true
-        cd android/device/"$brand"/"$codename"
-        bash extract-files.sh ${{ github.workspace }}/vnd_project/dump/
+
+        if [ -d "$DT_DIR" ]; then
+          echo "🛠️ Корректируем дерево устройства в $DT_DIR..."
+          cd "$DT_DIR"
+          
+          # На всякий случай переводим в ловеркейс для сопоставления со старыми конфигами full_64
+          low_codename=$(echo "$codename" | tr '[:upper:]' '[:lower:]')
+          
+          # 1. Заменяем FULL-64 внутри содержимого всех файлов (.sh, .mk, bp)
+          find . -type f -exec sed -i "s/FULL-64/$codename/g" {} +
+          find . -type f -exec sed -i "s/full_64/$low_codename/g" {} +
+          
+          # 2. Переименовываем конфигурационные файлы, содержащие FULL-64 в названии
+          find . -name "*FULL-64*" | while read -r file; do
+            new_file=$(echo "$file" | sed "s/FULL-64/$codename/g")
+            mv "$file" "$new_file"
+          done
+          
+          # То же самое для возможных файлов с именем full_64
+          find . -name "*full_64*" | while read -r file; do
+            new_file=$(echo "$file" | sed "s/full_64/$low_codename/g")
+            mv "$file" "$new_file"
+          done
+          
+          echo "✅ Все упоминания FULL-64 успешно заменены на чистый кодовый синоним: $codename!"
+          
+          echo "Запускаем extract-files.sh..."
+          chmod +x *.sh
+          bash extract-files.sh ${{ github.workspace }}/vnd_project/dump/
+        else
+          echo "❌ Ошибка: Папка дерева устройства не найдена: $DT_DIR"
+          exit 1
+        fi
         
     - name: Uploading Vendor Tree
       if: env.GVT == 'true'
